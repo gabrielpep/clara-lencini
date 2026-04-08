@@ -15,7 +15,7 @@ const NOTION_DATABASE_ID = process.env.NOTION_DATABASE_ID;
 
 // Inicializar Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
 // Função para buscar no Notion
 async function buscarNoNotion(palavraChave) {
