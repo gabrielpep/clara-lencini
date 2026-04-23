@@ -20,6 +20,9 @@ const DATABASES = {
   espetaculos: '33cc257d3c008098a5cbe8210346cb30'
 };
 
+// Armazenar histórico de conversas (em memória)
+const conversationHistory = new Map();
+
 // Função para buscar todas as informações do Notion
 async function buscarDadosNotion() {
   try {
@@ -92,8 +95,8 @@ async function buscarDadosNotion() {
   }
 }
 
-// Função para processar com Groq usando RAG
-async function processarComGroqRAG(mensagemUsuario) {
+// Função para processar com Groq usando RAG + Memória
+async function processarComGroqRAG(mensagemUsuario, userId) {
   try {
     // Buscar TODOS os dados do Notion
     const dadosNotion = await buscarDadosNotion();
@@ -102,8 +105,14 @@ async function processarComGroqRAG(mensagemUsuario) {
       return 'Desculpe, tive um problema ao acessar as informações. Tente novamente! 😊';
     }
 
+    // Pegar histórico da conversa (últimas 10 mensagens)
+    if (!conversationHistory.has(userId)) {
+      conversationHistory.set(userId, []);
+    }
+    const historico = conversationHistory.get(userId);
+
     // Formatar dados para o contexto
-    let contexto = '# BASE DE CONHECIMENTO DA ESCOLA DE DANÇA\n\n';
+    let contexto = '# BASE DE CONHECIMENTO - STUDIO DE DANÇA ALINE LENCINI\n\n';
 
     // Modalidades
     contexto += '## MODALIDADES E HORÁRIOS:\n';
@@ -135,28 +144,33 @@ async function processarComGroqRAG(mensagemUsuario) {
       contexto += '\n';
     });
 
-    // Enviar para Groq com contexto completo
-    const systemPrompt = `Você é a Clara, assistente virtual da escola de dança Clara Lencini. Você é amigável, prestativa e sempre responde com base nas informações fornecidas abaixo.
+    // System prompt com identidade e instruções
+    const systemPrompt = `Você é a Clara, assistente virtual do Studio de Dança Aline Lencini. Você é amigável, entusiasmada com dança e sempre prestativa!
 
 ${contexto}
 
 INSTRUÇÕES:
 - Use APENAS as informações acima para responder
-- Seja natural e conversacional
-- Se a pergunta for sobre horários, mencione professor e duração também
-- Se a pergunta for sobre preços, mencione benefícios se houver
-- Mantenha respostas objetivas (máximo 4 frases)
-- Use emojis quando apropriado 😊
-- Se não tiver a informação exata, sugira entrar em contato`;
+- Lembre-se do contexto da conversa anterior
+- Seja natural, conversacional e use emojis quando apropriado 😊💃
+- Quando mencionar horários, inclua professor e duração
+- Quando mencionar preços, mencione benefícios se houver
+- Se não souber algo específico, seja honesta e sugira entrar em contato
+- Mantenha respostas objetivas (máximo 4 frases, exceto se precisar listar várias opções)
+- Você trabalha no Studio de Dança ALINE LENCINI (não Clara Lencini)`;
+
+    // Montar mensagens com histórico
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      ...historico,
+      { role: 'user', content: mensagemUsuario }
+    ];
 
     const response = await axios.post(
       'https://api.groq.com/openai/v1/chat/completions',
       {
         model: 'llama-3.3-70b-versatile',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: mensagemUsuario }
-        ],
+        messages: messages,
         temperature: 0.7,
         max_tokens: 500
       },
@@ -168,7 +182,18 @@ INSTRUÇÕES:
       }
     );
 
-    return response.data.choices[0].message.content;
+    const resposta = response.data.choices[0].message.content;
+
+    // Adicionar ao histórico (manter últimas 10 interações = 20 mensagens)
+    historico.push({ role: 'user', content: mensagemUsuario });
+    historico.push({ role: 'assistant', content: resposta });
+    
+    // Limitar histórico a 20 mensagens (10 pares)
+    if (historico.length > 20) {
+      historico.splice(0, historico.length - 20);
+    }
+
+    return resposta;
   } catch (error) {
     console.error('Erro ao processar com Groq:', error);
     return 'Desculpe, tive um problema ao processar sua mensagem. Tente novamente! 😊';
@@ -182,11 +207,12 @@ slackApp.message(async ({ message, say }) => {
     if (message.subtype && message.subtype === 'bot_message') return;
     
     const mensagemUsuario = message.text;
+    const userId = message.user;
     
-    console.log(`Mensagem recebida: ${mensagemUsuario}`);
+    console.log(`Mensagem recebida de ${userId}: ${mensagemUsuario}`);
     
-    // Processar com RAG
-    const resposta = await processarComGroqRAG(mensagemUsuario);
+    // Processar com RAG + Memória
+    const resposta = await processarComGroqRAG(mensagemUsuario, userId);
     
     // Responder no Slack
     await say(resposta);
@@ -202,11 +228,12 @@ slackApp.event('app_mention', async ({ event, say }) => {
   try {
     // Remover a menção do bot da mensagem
     const mensagemUsuario = event.text.replace(/<@[A-Z0-9]+>/g, '').trim();
+    const userId = event.user;
     
-    console.log(`Menção recebida: ${mensagemUsuario}`);
+    console.log(`Menção recebida de ${userId}: ${mensagemUsuario}`);
     
-    // Processar com RAG
-    const resposta = await processarComGroqRAG(mensagemUsuario);
+    // Processar com RAG + Memória
+    const resposta = await processarComGroqRAG(mensagemUsuario, userId);
     
     // Responder no canal
     await say(resposta);
@@ -220,5 +247,5 @@ slackApp.event('app_mention', async ({ event, say }) => {
 // Iniciar servidor
 (async () => {
   await slackApp.start();
-  console.log('⚡️ Bot RAG está rodando com Groq AI + Notion!');
+  console.log('⚡️ Clara está online no Studio de Dança Aline Lencini!');
 })();
