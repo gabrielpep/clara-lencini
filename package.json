@@ -1,7 +1,7 @@
 {
   "name": "slack-notion-bot",
   "version": "1.0.0",
-  "description": "Bot Slack com Notion e Google Gemini AI",
+  "description": "Bot Slack com Notion e Groq AI",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -10,7 +10,6 @@
     "express": "^4.18.2",
     "axios": "^1.6.0",
     "@notionhq/client": "^2.2.15",
-    "@slack/bolt": "^3.17.1",
-    "@google/generative-ai": "^0.1.3"
+    "@slack/bolt": "^3.17.1"
   }
 }
